@@ -1,6 +1,31 @@
 import { AgentManager } from '@/agents/AgentManager';
 import { getOpenAIApiKey } from '@/utils/apiKeyManager';
 
+// Message listener for communication with content scripts and popup
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('Background script received message:', message);
+  
+  switch (message.action) {
+    case 'agentCoordinatorReady':
+      console.log(`✅ Agent Coordinator ready with ${message.agentCount} agents on ${message.pageContext?.pageType || 'unknown'} page`);
+      sendResponse({ success: true, message: 'Notification received' });
+      break;
+      
+    case 'getApiKey':
+      getOpenAIApiKey().then(apiKey => {
+        sendResponse({ success: true, apiKey });
+      }).catch(error => {
+        sendResponse({ success: false, error: error.message });
+      });
+      return true; // Will respond asynchronously
+      
+    default:
+      sendResponse({ success: false, error: 'Unknown action' });
+  }
+  
+  return false; // Synchronous response
+});
+
 (async () => {
   try {
     const apiKey = await getOpenAIApiKey();

@@ -37,11 +37,22 @@ export class BulkOperationDisplayManager {
       
       const progressBar = this.getElementById('bulk-progress-bar') as HTMLElement;
       if (progressBar) {
-        progressBar.style.width = `${progressPercent}%`;
+        progressBar.style.width = `${Math.min(100, Math.max(0, progressPercent))}%`;
+        
+        // Update progress bar color based on status
+        if (operation.status === 'running') {
+          progressBar.style.backgroundColor = '#4CAF50'; // Green for running
+        } else if (operation.status === 'paused') {
+          progressBar.style.backgroundColor = '#FF9800'; // Orange for paused
+        } else if (operation.status === 'failed') {
+          progressBar.style.backgroundColor = '#F44336'; // Red for failed
+        } else if (operation.status === 'completed') {
+          progressBar.style.backgroundColor = '#2196F3'; // Blue for completed
+        }
       }
 
       this.setElementText('bulk-progress-text', 
-        `${progressPercent}% (${operation.progress}/${operation.total})`);
+        `${progressPercent}% (${operation.progress}/${operation.total} completed)`);
 
       this.updateOperationControls(state);
     } else {

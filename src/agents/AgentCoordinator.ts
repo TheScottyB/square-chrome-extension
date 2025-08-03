@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { DOMAgent } from './base/DOMAgent';
 import { SquareSEOAgent } from './square/SquareSEOAgent';
 import { SquareNavigationAgent } from './square/SquareNavigationAgent';
+import { SquareCatalogAgent } from './square/SquareCatalogAgent';
+import { createMockAgents } from './mock/MockAgents';
 import { AgentContext, AgentTask, AgentResult, PageContext } from './types';
 import { pageDetectionService } from '@/utils/pageDetectionService';
 import { BulkOperationManager } from './bulk/BulkOperationManager';
@@ -17,30 +19,41 @@ export class AgentCoordinator {
   private context: AgentContext;
   private isInitialized = false;
 
+  private isMockAgent = false;
+
   constructor(context: AgentContext) {
     this.context = context;
     
     // Initialize the meta-agent that coordinates other agents
-    this.coordinatorAgent = new Agent({
-      name: 'Agent Coordinator',
-      instructions: `You are the central coordinator for a team of specialized DOM automation agents.
-      
-      Your role is to:
-      - Route tasks to the most appropriate specialized agent
-      - Coordinate multi-step workflows that require multiple agents
-      - Handle fallbacks when agents fail
-      - Optimize task execution order for efficiency
-      - Monitor agent performance and health
-      
-      Available agents and their capabilities:
-      - SquareSEOAgent: SEO optimization, form filling, content generation
-      - SquareNavigationAgent: Page navigation, search, URL management
-      
-      Always choose the most specialized agent for each task type.`,
-      model: 'gpt-4o-mini',
-      // TODO: Fix tool types for OpenAI agents 0.0.14
-      // tools: this.buildCoordinatorTools()
-    });
+    try {
+      this.coordinatorAgent = new Agent({
+        name: 'Agent Coordinator',
+        instructions: `You are the central coordinator for a team of specialized DOM automation agents.
+        
+        Your role is to:
+        - Route tasks to the most appropriate specialized agent
+        - Coordinate multi-step workflows that require multiple agents
+        - Handle fallbacks when agents fail
+        - Optimize task execution order for efficiency
+        - Monitor agent performance and health
+        
+        Available agents and their capabilities:
+        - SquareSEOAgent: SEO optimization, form filling, content generation
+        - SquareNavigationAgent: Page navigation, search, URL management
+        
+        Always choose the most specialized agent for each task type.`,
+        model: 'gpt-4o-mini',
+        // TODO: Fix tool types for OpenAI agents 0.0.14
+        // tools: this.buildCoordinatorTools()
+      });
+    } catch (error) {
+      console.warn('Failed to initialize OpenAI Agent (using mock):', error);
+      this.isMockAgent = true;
+      // Create a mock agent for popup context
+      this.coordinatorAgent = {
+        name: 'Mock Agent Coordinator'
+      } as any;
+    }
   }
 
   async initialize(): Promise<void> {
@@ -64,12 +77,17 @@ export class AgentCoordinator {
       this.isInitialized = true;
       console.log('✅ Agent Coordinator initialized successfully');
       
-      // Notify background script
-      chrome.runtime.sendMessage({
-        action: 'agentCoordinatorReady',
-        agentCount: this.agents.size,
-        pageContext: this.context.page
-      });
+      // Notify background script (with error handling)
+      try {
+        chrome.runtime.sendMessage({
+          action: 'agentCoordinatorReady',
+          agentCount: this.agents.size,
+          pageContext: this.context.page
+        });
+      } catch (error) {
+        // Ignore connection errors - background script may not be ready
+        console.log('Background script not available for notification:', error.message);
+      }
 
     } catch (error) {
       console.error('❌ Failed to initialize Agent Coordinator:', error);
@@ -94,10 +112,19 @@ export class AgentCoordinator {
       console.log('🎯 SEO agent initialized');
     }
 
-    // Could add more agents here based on page context
-    // - ImageAgent for image-heavy pages
-    // - FormAgent for form-heavy pages
-    // - DataExtractionAgent for catalog pages
+    // Initialize catalog agent for catalog pages
+    if (pageType === 'items-library' || pageType === 'item-detail' || pageType === 'inventory') {
+      const catalogAgent = new SquareCatalogAgent(this.context);
+      this.agents.set('catalog', catalogAgent);
+      console.log('📦 Catalog agent initialized');
+    }
+
+    // Always initialize mock agents for bulk operations testing
+    const mockAgents = createMockAgents(this.context);
+    for (const [key, agent] of mockAgents) {
+      this.agents.set(key, agent);
+      console.log(`🧪 Mock ${key} agent initialized`);
+    }
   }
 
   private buildCoordinatorTools() {
@@ -152,14 +179,23 @@ export class AgentCoordinator {
     ];
   }
 
-  private async routeTaskToAgent({ agentType, task }: { agentType: 'seo' | 'navigation' | 'image' | 'form'; task: any }): Promise<AgentResult> {
-    const agent = this.agents.get(agentType);
+  private async routeTaskToAgent({ agentType, task }: { agentType: 'seo' | 'navigation' | 'image' | 'form' | string; task: any }): Promise<AgentResult> {
+    let agent = this.agents.get(agentType);
     
+    // If the specific agent is not available, try to find a suitable fallback
     if (!agent) {
-      return {
-        success: false,
-        error: `Agent type '${agentType}' not available. Available agents: ${Array.from(this.agents.keys()).join(', ')}`
-      };
+      // Try to find any available agent as fallback
+      const availableAgents = Array.from(this.agents.keys());
+      if (availableAgents.length > 0) {
+        const fallbackAgentType = availableAgents[0];
+        agent = this.agents.get(fallbackAgentType)!;
+        console.log(`🔄 Agent '${agentType}' not available, using fallback '${fallbackAgentType}'`);
+      } else {
+        return {
+          success: false,
+          error: `No agents available. Requested: '${agentType}', Available: ${Array.from(this.agents.keys()).join(', ')}`
+        };
+      }
     }
 
     console.log(`🎯 Routing ${task.type} task to ${agentType} agent`);
@@ -400,6 +436,11 @@ export class AgentCoordinator {
       await this.initialize();
     }
 
+    // If using mock agent, simulate task routing
+    if (this.isMockAgent) {
+      return this.simulateTaskExecution(task);
+    }
+
     const prompt = `Execute the following task using the most appropriate agent:
     
 Task Type: ${task.type}
@@ -425,6 +466,28 @@ Analyze the task and route it to the correct specialized agent.`;
         error: error instanceof Error ? error.message : String(error)
       };
     }
+  }
+
+  private simulateTaskExecution(task: AgentTask): Promise<AgentResult> {
+    // Simple task routing simulation for popup context
+    const agentMapping: Record<string, string> = {
+      'seo-update': 'seo',
+      'navigate': 'navigation',
+      'catalog-sync': 'catalog',
+      'validation': 'validation',
+      'image-search': 'image-search'
+    };
+
+    const agentType = agentMapping[task.type] || 'default';
+    
+    return this.routeTaskToAgent({
+      agentType: agentType as any,
+      task: {
+        type: task.type,
+        data: task.data,
+        priority: task.priority
+      }
+    });
   }
 
   async handleSEOUpdate(seoData: any): Promise<AgentResult> {

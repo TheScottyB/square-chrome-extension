@@ -88,13 +88,21 @@ export class BulkOperationStateManager {
       // Check if there's an active operation
       if (operations.length > 0) {
         const operation = operations[0];
-        this.state.isActive = true;
+        this.state.isActive = operation.status === 'running' || operation.status === 'paused';
         this.state.currentOperation = {
           type: operation.config?.operationType || 'unknown',
           status: operation.status,
           progress: operation.progress.completedItems || 0,
           total: operation.progress.totalItems || 0,
           executionStrategy: operation.config?.executionStrategy || 'sequential'
+        };
+        
+        // Update real-time stats from the operation
+        this.state.stats = {
+          queued: operation.progress.totalItems - operation.progress.completedItems - operation.progress.failedItems - operation.progress.skippedItems,
+          completed: operation.progress.completedItems,
+          failed: operation.progress.failedItems,
+          active: operation.status === 'running' ? 1 : 0
         };
       } else {
         this.state.isActive = false;

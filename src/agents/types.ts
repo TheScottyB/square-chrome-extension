@@ -4,7 +4,7 @@
 
 export interface PageContext {
   url: string;
-  pageType: 'items-library' | 'item-detail' | 'dashboard' | 'spocket' | 'unknown';
+  pageType: 'items-library' | 'item-detail' | 'dashboard' | 'spocket' | 'inventory' | 'unknown';
   itemId?: string;
   title?: string;
   readyState?: DocumentReadyState;
@@ -27,7 +27,7 @@ export interface AgentContext {
 
 export interface AgentTask {
   id: string;
-  type: 'seo-update' | 'navigate' | 'extract-data' | 'fill-form' | 'manage-images' | 'search' | 'bulk-operation' | 'custom';
+  type: 'seo-update' | 'navigate' | 'extract-data' | 'fill-form' | 'manage-images' | 'search' | 'bulk-operation' | 'custom' | 'catalog-sync' | 'validation' | 'image-search' | 'inventory-update';
   priority: 'high' | 'medium' | 'low';
   data: any;
   maxRetries?: number;
@@ -104,7 +104,7 @@ export interface BulkOperationConfig {
   id: string;
   name: string;
   description?: string;
-  operationType: 'seo-update' | 'data-extraction' | 'navigation' | 'form-filling' | 'image-processing' | 'custom';
+  operationType: 'seo-update' | 'data-extraction' | 'navigation' | 'form-filling' | 'image-processing' | 'custom' | 'catalog-sync' | 'validation' | 'image-search';
   executionStrategy: 'parallel' | 'sequential' | 'rate-limited';
   batchSize?: number;
   rateLimit?: {

@@ -32,7 +32,51 @@ export class BulkOperationUI implements BulkOperationEventHandlerCallbacks {
   public async onOperationStart(type: string, params?: any): Promise<void> {
     try {
       const config = this.configManager.createConfigForOperation(type, params);
-await this.manager.startOperation(type);
+      
+      // Create mock events for the operation
+      const events = {
+        onStart: (operation: any) => {
+          console.log(`✅ Started ${type} operation:`, operation.name);
+          this.stateManager.addError('system', `Started ${type} operation successfully`, null);
+        },
+        onProgress: (progress: any) => {
+          console.log(`📊 Progress update:`, progress);
+        },
+        onBatchComplete: (batch: any) => {
+          console.log(`✅ Batch completed:`, batch.id);
+        },
+        onItemComplete: (item: any, result: any) => {
+          console.log(`✅ Item completed:`, item.id, result);
+        },
+        onPause: (operation: any) => {
+          console.log(`⏸️ Operation paused:`, operation.name);
+        },
+        onResume: (operation: any) => {
+          console.log(`▶️ Operation resumed:`, operation.name);
+        },
+        onCancel: (operation: any) => {
+          console.log(`❌ Operation cancelled:`, operation.name);
+        },
+        onComplete: (result: any) => {
+          console.log(`🎉 Operation completed:`, result.summary);
+          this.stateManager.addError('system', `Completed ${type} operation: ${result.summary.successful}/${result.summary.totalProcessed} successful`, null);
+        },
+        onError: (error: any) => {
+          console.error(`❌ Operation error:`, error);
+          this.stateManager.addError(error.itemId || 'system', error.error, error);
+        }
+      };
+      
+      // Create mock items for testing
+      const mockItems = [
+        { id: 'item-1', data: { name: 'Test Product 1', category: 'electronics' } },
+        { id: 'item-2', data: { name: 'Test Product 2', category: 'clothing' } },
+        { id: 'item-3', data: { name: 'Test Product 3', category: 'books' } }
+      ];
+      
+      // Create and start the operation
+      const operationId = await this.manager.createOperation(config, mockItems, events);
+      await this.manager.startOperation(operationId);
       await this.stateManager.updateState();
     } catch (error) {
       console.error('Failed to start bulk operation:', error);

@@ -490,6 +490,12 @@ export class BulkOperationManager {
         return this.agents.get('seo') || null;
       case 'navigation':
         return this.agents.get('navigation') || null;
+      case 'catalog-sync':
+        return this.agents.get('catalog') || null;
+      case 'validation':
+        return this.agents.get('validation') || null;
+      case 'image-search':
+        return this.agents.get('image-search') || null;
       case 'data-extraction':
         return this.agents.get('extraction') || null;
       case 'form-filling':
@@ -508,13 +514,16 @@ export class BulkOperationManager {
     const mapping: Record<BulkOperationConfig['operationType'], AgentTask['type']> = {
       'seo-update': 'seo-update',
       'navigation': 'navigate',
+      'catalog-sync': 'catalog-sync',
+      'validation': 'validation',
+      'image-search': 'image-search',
       'data-extraction': 'extract-data',
       'form-filling': 'fill-form',
       'image-processing': 'manage-images',
       'custom': 'custom'
     };
     
-    return mapping[operationType];
+    return mapping[operationType] || 'custom';
   }
 
   /**
