@@ -5,6 +5,7 @@ import { SquareSEOAgent } from './square/SquareSEOAgent';
 import { SquareNavigationAgent } from './square/SquareNavigationAgent';
 import { AgentContext, AgentTask, AgentResult, PageContext } from './types';
 import { pageDetectionService } from '@/utils/pageDetectionService';
+import { BulkOperationManager } from './bulk/BulkOperationManager';
 
 /**
  * Central coordinator for managing multiple DOM agents
@@ -48,14 +49,17 @@ export class AgentCoordinator {
     console.log('🚀 Initializing Agent Coordinator...');
 
     try {
-      // Initialize specialized agents based on page context
-      await this.initializeAgents();
-      
-      // Set up inter-agent communication
-      this.setupAgentCommunication();
-      
-      // Start monitoring page changes
-      this.startPageMonitoring();
+    // Initialize specialized agents based on page context
+    await this.initializeAgents();
+
+    // Initialize bulk operation manager
+    this.initializeBulkOperations();
+    
+    // Set up inter-agent communication
+    this.setupAgentCommunication();
+    
+    // Start monitoring page changes
+    this.startPageMonitoring();
       
       this.isInitialized = true;
       console.log('✅ Agent Coordinator initialized successfully');
@@ -337,6 +341,14 @@ export class AgentCoordinator {
         error: error instanceof Error ? error.message : String(error) 
       });
     }
+  }
+
+  private initializeBulkOperations(): void {
+    const bulkManager = new BulkOperationManager(this.context, this.agents);
+    console.log('📦 Bulk Operation Manager initialized');
+
+    // Example usage
+    bulkManager.cleanup(); // Clean up old operations
   }
 
   private startPageMonitoring(): void {

@@ -247,6 +247,129 @@
     .tab-content.active {
       display: block;
     }
+
+    /* Bulk Operations specific styles */
+    .bulk-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .bulk-stats .stat {
+      padding: 8px;
+    }
+
+    .bulk-stats .stat-value {
+      font-size: 18px;
+    }
+
+    .bulk-operation-controls {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .bulk-operation-controls .button {
+      flex: 1;
+      margin-bottom: 0;
+    }
+
+    .bulk-queue-item {
+      padding: 4px 8px;
+      margin: 2px 0;
+      background: rgba(25, 118, 210, 0.1);
+      border-radius: 3px;
+      font-size: 11px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .bulk-queue-item.completed {
+      background: rgba(76, 175, 80, 0.1);
+      color: #4caf50;
+    }
+
+    .bulk-queue-item.failed {
+      background: rgba(244, 67, 54, 0.1);
+      color: #f44336;
+    }
+
+    .bulk-queue-item.running {
+      background: rgba(255, 152, 0, 0.1);
+      color: #ff9800;
+    }
+
+    .bulk-queue-item .status-icon {
+      margin-right: 6px;
+    }
+
+    .bulk-error-item {
+      padding: 6px 8px;
+      margin: 2px 0;
+      background: rgba(244, 67, 54, 0.1);
+      border-radius: 3px;
+      font-size: 11px;
+      border-left: 3px solid #f44336;
+    }
+
+    .bulk-error-item .error-message {
+      font-weight: 500;
+      margin-bottom: 2px;
+    }
+
+    .bulk-error-item .error-details {
+      opacity: 0.7;
+      font-size: 10px;
+    }
+
+    .progress-container {
+      position: relative;
+    }
+
+    .progress-text {
+      font-size: 12px;
+      color: #666;
+      margin-top: 4px;
+      text-align: center;
+    }
+
+    .operation-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: uppercase;
+    }
+
+    .operation-badge.running {
+      background: #fff3e0;
+      color: #f57c00;
+    }
+
+    .operation-badge.paused {
+      background: #f3e5f5;
+      color: #7b1fa2;
+    }
+
+    .operation-badge.completed {
+      background: #e8f5e8;
+      color: #2e7d32;
+    }
+
+    .operation-badge.failed {
+      background: #ffeaea;
+      color: #c62828;
+    }
+
+    .config-section {
+      background: #f5f5f5;
+      border-radius: 4px;
+      padding: 12px;
+      margin: 8px 0;
+    }
   </style>
 </head>
 <body>
@@ -260,6 +383,7 @@
 
   <div class="tabs">
     <div class="tab active" data-tab="automation">Automation</div>
+    <div class="tab" data-tab="bulk">Bulk Ops</div>
     <div class="tab" data-tab="images">Images</div>
     <div class="tab" data-tab="spocket">Spocket</div>
     <div class="tab" data-tab="settings">Settings</div>
@@ -298,6 +422,158 @@
         <div id="operation-log" class="log"></div>
       </div>
       <div id="no-operation">No operation in progress</div>
+    </div>
+  </div>
+
+  <!-- Bulk Operations Tab -->
+  <div id="bulk-tab" class="tab-content">
+    <!-- Operation Overview -->
+    <div class="section">
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-value" id="bulk-queue-count">0</div>
+          <div class="stat-label">Queued</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="bulk-completed-count">0</div>
+          <div class="stat-label">Completed</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="bulk-failed-count">0</div>
+          <div class="stat-label">Failed</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="bulk-active-count">0</div>
+          <div class="stat-label">Active</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Bulk Actions -->
+    <div class="section">
+      <h3>Quick Bulk Actions</h3>
+      <button id="bulk-seo-all" class="button">✍️ Update SEO for All Items</button>
+      <button id="bulk-images-all" class="button">🖼️ Find Images for All Items</button>
+      <button id="bulk-sync-catalog" class="button success">📊 Sync All Catalog Data</button>
+      <button id="bulk-validate-all" class="button secondary">✅ Validate All Items</button>
+    </div>
+
+    <!-- Current Bulk Operation -->
+    <div class="section">
+      <h3>Current Operation</h3>
+      <div id="bulk-operation-active" class="hidden">
+        <div class="input-group">
+          <label>Operation:</label>
+          <div id="bulk-operation-type">-</div>
+        </div>
+        <div class="input-group">
+          <label>Status:</label>
+          <div id="bulk-operation-status">Initializing...</div>
+        </div>
+        <div class="input-group">
+          <label>Progress:</label>
+          <div class="progress">
+            <div id="bulk-progress-bar" class="progress-bar" style="width: 0%"></div>
+          </div>
+          <div id="bulk-progress-text">0% (0/0)</div>
+        </div>
+        <div class="input-group">
+          <label>Execution Strategy:</label>
+          <div id="bulk-execution-strategy">Sequential</div>
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 12px;">
+          <button id="bulk-pause" class="button secondary" style="flex: 1;">⏸️ Pause</button>
+          <button id="bulk-resume" class="button secondary hidden" style="flex: 1;">▶️ Resume</button>
+          <button id="bulk-cancel" class="button danger" style="flex: 1;">❌ Cancel</button>
+        </div>
+      </div>
+      <div id="bulk-operation-idle">
+        <p>No bulk operation in progress</p>
+        <button id="start-custom-bulk" class="button">🚀 Start Custom Operation</button>
+      </div>
+    </div>
+
+    <!-- Configuration Panel -->
+    <div class="section">
+      <h3>Operation Configuration</h3>
+      <div class="input-group">
+        <label for="bulk-execution-strategy-select">Execution Strategy:</label>
+        <select id="bulk-execution-strategy-select">
+          <option value="sequential">Sequential (One at a time)</option>
+          <option value="parallel">Parallel (All at once)</option>
+          <option value="batch">Batch (Groups of items)</option>
+          <option value="adaptive">Adaptive (Smart queuing)</option>
+        </select>
+      </div>
+      <div class="input-group">
+        <label for="bulk-batch-size">Batch Size:</label>
+        <input type="number" id="bulk-batch-size" value="5" min="1" max="20">
+      </div>
+      <div class="input-group">
+        <label for="bulk-delay">Delay Between Operations (ms):</label>
+        <input type="number" id="bulk-delay" value="1000" min="0" max="10000" step="100">
+      </div>
+      <div class="input-group">
+        <label for="bulk-max-retries">Max Retries per Item:</label>
+        <input type="number" id="bulk-max-retries" value="3" min="0" max="10">
+      </div>
+      <div class="toggle">
+        <label for="bulk-continue-on-error">Continue operation on errors</label>
+        <input type="checkbox" id="bulk-continue-on-error" checked>
+      </div>
+      <div class="toggle">
+        <label for="bulk-detailed-logging">Enable detailed logging</label>
+        <input type="checkbox" id="bulk-detailed-logging">
+      </div>
+    </div>
+
+    <!-- Task Queue Management -->
+    <div class="section">
+      <h3>Task Queue</h3>
+      <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+        <button id="bulk-clear-queue" class="button secondary" style="flex: 1;">🗑️ Clear Queue</button>
+        <button id="bulk-retry-failed" class="button" style="flex: 1;">🔄 Retry Failed</button>
+      </div>
+      <div class="input-group">
+        <label>Queue Status:</label>
+        <div id="bulk-queue-summary">Queue is empty</div>
+      </div>
+      <div id="bulk-queue-list" class="log" style="max-height: 120px;">
+        No tasks in queue
+      </div>
+    </div>
+
+    <!-- Error Handling -->
+    <div class="section">
+      <h3>Error Details</h3>
+      <div id="bulk-error-summary" class="hidden">
+        <div class="input-group">
+          <label>Recent Errors:</label>
+          <div id="bulk-error-count">0 errors</div>
+        </div>
+        <div id="bulk-error-list" class="log" style="max-height: 100px;">
+          No errors recorded
+        </div>
+        <button id="bulk-clear-errors" class="button secondary">🗑️ Clear Error Log</button>
+      </div>
+      <div id="bulk-no-errors">
+        <p>No errors to display</p>
+      </div>
+    </div>
+
+    <!-- Advanced Operations -->
+    <div class="section">
+      <h3>Advanced Operations</h3>
+      <div class="input-group">
+        <label for="bulk-filter-criteria">Filter Criteria (JSON):</label>
+        <textarea id="bulk-filter-criteria" placeholder='{"category": "electronics", "status": "active"}'></textarea>
+      </div>
+      <div class="input-group">
+        <label for="bulk-operation-params">Operation Parameters (JSON):</label>
+        <textarea id="bulk-operation-params" placeholder='{"updateImages": true, "skipExisting": false}'></textarea>
+      </div>
+      <button id="bulk-preview-operation" class="button secondary">👁️ Preview Operation</button>
+      <button id="bulk-export-results" class="button secondary">📤 Export Results</button>
     </div>
   </div>
 

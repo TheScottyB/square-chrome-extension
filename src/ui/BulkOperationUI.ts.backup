@@ -1,0 +1,494 @@
+// Bulk Operations UI Controller
+import { BulkOperationManager } from '@/agents/bulk/BulkOperationManager';
+import { 
+  BulkOperationConfig, 
+  BulkOperationStatus,
+  BulkOperationItem,
+  BulkOperationEvents
+} from '@/agents/types';
+
+export interface BulkOperationUIState {
+  operations: BulkOperationStatus[];
+  currentOperationId?: string;
+  errors: Array<{
+    taskId: string;
+    message: string;
+    timestamp: Date;
+    details?: any;
+  }>;
+}
+
+export class BulkOperationUI {
+  private manager: BulkOperationManager;
+  private state: BulkOperationUIState;
+  private updateInterval: number | null = null;
+
+  constructor(manager: BulkOperationManager) {
+    this.manager = manager;
+    this.state = {
+      operations: [],
+      errors: []
+    };
+    
+    this.initializeEventListeners();
+    this.setupPeriodicUpdates();
+  }
+
+  private initializeEventListeners(): void {
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        const tabName = target.getAttribute('data-tab');
+        if (tabName) {
+          this.switchTab(tabName);
+        }
+      });
+    });
+
+    // Quick bulk actions
+    this.getElementById('bulk-seo-all')?.addEventListener('click', () => {
+      this.startBulkOperation('seo-update', { updateAllFields: true });
+    });
+
+    this.getElementById('bulk-images-all')?.addEventListener('click', () => {
+      this.startBulkOperation('image-search', { downloadImages: true });
+    });
+
+    this.getElementById('bulk-sync-catalog')?.addEventListener('click', () => {
+      this.startBulkOperation('catalog-sync', { fullSync: true });
+    });
+
+    this.getElementById('bulk-validate-all')?.addEventListener('click', () => {
+      this.startBulkOperation('validation', { comprehensive: true });
+    });
+
+    // Custom operation
+    this.getElementById('start-custom-bulk')?.addEventListener('click', () => {
+      this.startCustomOperation();
+    });
+
+    // Operation controls
+    this.getElementById('bulk-pause')?.addEventListener('click', () => {
+      this.manager.pauseOperation();
+      this.updateOperationControls();
+    });
+
+    this.getElementById('bulk-resume')?.addEventListener('click', () => {
+      this.manager.resumeOperation();
+      this.updateOperationControls();
+    });
+
+    this.getElementById('bulk-cancel')?.addEventListener('click', () => {
+      this.manager.cancelOperation();
+      this.updateOperationState();
+    });
+
+    // Queue management
+    this.getElementById('bulk-clear-queue')?.addEventListener('click', () => {
+      this.manager.clearQueue();
+      this.updateQueueDisplay();
+    });
+
+    this.getElementById('bulk-retry-failed')?.addEventListener('click', () => {
+      this.retryFailedTasks();
+    });
+
+    // Error management
+    this.getElementById('bulk-clear-errors')?.addEventListener('click', () => {
+      this.clearErrors();
+    });
+
+    // Advanced operations
+    this.getElementById('bulk-preview-operation')?.addEventListener('click', () => {
+      this.previewOperation();
+    });
+
+    this.getElementById('bulk-export-results')?.addEventListener('click', () => {
+      this.exportResults();
+    });
+
+    // Configuration changes
+    this.getElementById('bulk-execution-strategy-select')?.addEventListener('change', (e) => {
+      const target = e.target as HTMLSelectElement;
+      this.updateExecutionStrategy(target.value as any);
+    });
+
+    // Real-time config updates
+    ['bulk-batch-size', 'bulk-delay', 'bulk-max-retries'].forEach(id => {
+      this.getElementById(id)?.addEventListener('change', () => {
+        this.updateConfiguration();
+      });
+    });
+
+    ['bulk-continue-on-error', 'bulk-detailed-logging'].forEach(id => {
+      this.getElementById(id)?.addEventListener('change', () => {
+        this.updateConfiguration();
+      });
+    });
+  }
+
+  private setupPeriodicUpdates(): void {
+    this.updateInterval = window.setInterval(() => {
+      this.updateState();
+    }, 1000);
+  }
+
+  private async updateState(): Promise<void> {
+    try {
+      // Update state from manager
+      const operations = await this.manager.getActiveOperations();
+      const queue = this.manager.getQueue();
+      const stats = this.manager.getStats();
+
+      this.state.queue = queue;
+      this.state.stats = {
+        queued: stats.pending || 0,
+        completed: stats.completed || 0,
+        failed: stats.failed || 0,
+        active: stats.running || 0
+      };
+
+      // Check if there's an active operation
+      if (operations.length > 0) {
+        const operation = operations[0];
+        this.state.isActive = true;
+        this.state.currentOperation = {
+          type: operation.type,
+          status: operation.status,
+          progress: operation.progress || 0,
+          total: operation.total || 0,
+          executionStrategy: operation.config?.executionStrategy || 'sequential'
+        };
+      } else {
+        this.state.isActive = false;
+        this.state.currentOperation = undefined;
+      }
+
+      this.updateDisplay();
+    } catch (error) {
+      console.error('Failed to update bulk operation state:', error);
+    }
+  }
+
+  private updateDisplay(): void {
+    this.updateStats();
+    this.updateOperationState();
+    this.updateQueueDisplay();
+    this.updateErrorDisplay();
+  }
+
+  private updateStats(): void {
+    this.setElementText('bulk-queue-count', this.state.stats.queued.toString());
+    this.setElementText('bulk-completed-count', this.state.stats.completed.toString());
+    this.setElementText('bulk-failed-count', this.state.stats.failed.toString());
+    this.setElementText('bulk-active-count', this.state.stats.active.toString());
+  }
+
+  private updateOperationState(): void {
+    const activeElement = this.getElementById('bulk-operation-active');
+    const idleElement = this.getElementById('bulk-operation-idle');
+
+    if (this.state.isActive && this.state.currentOperation) {
+      activeElement?.classList.remove('hidden');
+      idleElement?.classList.add('hidden');
+
+      const operation = this.state.currentOperation;
+      this.setElementText('bulk-operation-type', operation.type);
+      this.setElementText('bulk-operation-status', operation.status);
+      this.setElementText('bulk-execution-strategy', operation.executionStrategy);
+
+      // Update progress
+      const progressPercent = operation.total > 0 ? 
+        Math.round((operation.progress / operation.total) * 100) : 0;
+      
+      const progressBar = this.getElementById('bulk-progress-bar') as HTMLElement;
+      if (progressBar) {
+        progressBar.style.width = `${progressPercent}%`;
+      }
+
+      this.setElementText('bulk-progress-text', 
+        `${progressPercent}% (${operation.progress}/${operation.total})`);
+
+      this.updateOperationControls();
+    } else {
+      activeElement?.classList.add('hidden');
+      idleElement?.classList.remove('hidden');
+    }
+  }
+
+  private updateOperationControls(): void {
+    const pauseBtn = this.getElementById('bulk-pause');
+    const resumeBtn = this.getElementById('bulk-resume');
+    const cancelBtn = this.getElementById('bulk-cancel');
+
+    if (!this.state.currentOperation) {
+      pauseBtn?.classList.add('hidden');
+      resumeBtn?.classList.add('hidden');
+      cancelBtn?.classList.add('hidden');
+      return;
+    }
+
+    const status = this.state.currentOperation.status;
+    
+    if (status === 'running') {
+      pauseBtn?.classList.remove('hidden');
+      resumeBtn?.classList.add('hidden');
+    } else if (status === 'paused') {
+      pauseBtn?.classList.add('hidden');
+      resumeBtn?.classList.remove('hidden');
+    } else {
+      pauseBtn?.classList.add('hidden');
+      resumeBtn?.classList.add('hidden');
+    }
+
+    cancelBtn?.classList.remove('hidden');
+  }
+
+  private updateQueueDisplay(): void {
+    const queueList = this.getElementById('bulk-queue-list');
+    const queueSummary = this.getElementById('bulk-queue-summary');
+
+    if (!queueList || !queueSummary) return;
+
+    if (this.state.queue.length === 0) {
+      queueList.textContent = 'No tasks in queue';
+      queueSummary.textContent = 'Queue is empty';
+      return;
+    }
+
+    const summary = `${this.state.queue.length} tasks in queue`;
+    queueSummary.textContent = summary;
+
+    // Display queue items
+    queueList.innerHTML = this.state.queue.slice(0, 10).map(task => {
+      const statusIcon = this.getStatusIcon(task.status);
+      const statusClass = task.status.toLowerCase();
+      
+      return `
+        <div class="bulk-queue-item ${statusClass}">
+          <span class="status-icon">${statusIcon}</span>
+          <span>${task.type}: ${task.itemId || 'Unknown'}</span>
+          <span>${task.status}</span>
+        </div>
+      `;
+    }).join('');
+
+    if (this.state.queue.length > 10) {
+      queueList.innerHTML += `<div class="bulk-queue-item">... and ${this.state.queue.length - 10} more</div>`;
+    }
+  }
+
+  private updateErrorDisplay(): void {
+    const errorSummary = this.getElementById('bulk-error-summary');
+    const noErrors = this.getElementById('bulk-no-errors');
+    const errorList = this.getElementById('bulk-error-list');
+    const errorCount = this.getElementById('bulk-error-count');
+
+    if (this.state.errors.length === 0) {
+      errorSummary?.classList.add('hidden');
+      noErrors?.classList.remove('hidden');
+      return;
+    }
+
+    errorSummary?.classList.remove('hidden');
+    noErrors?.classList.add('hidden');
+
+    if (errorCount) {
+      errorCount.textContent = `${this.state.errors.length} error${this.state.errors.length !== 1 ? 's' : ''}`;
+    }
+
+    if (errorList) {
+      errorList.innerHTML = this.state.errors.slice(0, 5).map(error => `
+        <div class="bulk-error-item">
+          <div class="error-message">${error.message}</div>
+          <div class="error-details">Task: ${error.taskId} | ${error.timestamp.toLocaleTimeString()}</div>
+        </div>
+      `).join('');
+    }
+  }
+
+  private async startBulkOperation(type: string, params: any = {}): Promise<void> {
+    try {
+      const config = this.getCurrentConfiguration();
+      config.operationParams = { ...config.operationParams, ...params };
+
+      await this.manager.startBulkOperation(type, [], config);
+      this.updateState();
+    } catch (error) {
+      console.error('Failed to start bulk operation:', error);
+      this.addError('system', `Failed to start ${type} operation: ${error}`, error);
+    }
+  }
+
+  private async startCustomOperation(): Promise<void> {
+    try {
+      const filterCriteria = this.getTextAreaValue('bulk-filter-criteria');
+      const operationParams = this.getTextAreaValue('bulk-operation-params');
+      
+      let filter = {};
+      let params = {};
+
+      if (filterCriteria) {
+        filter = JSON.parse(filterCriteria);
+      }
+
+      if (operationParams) {
+        params = JSON.parse(operationParams);
+      }
+
+      const config = this.getCurrentConfiguration();
+      config.filterCriteria = filter;
+      config.operationParams = params;
+
+      await this.manager.startBulkOperation('custom', [], config);
+      this.updateState();
+    } catch (error) {
+      console.error('Failed to start custom operation:', error);
+      this.addError('system', `Failed to start custom operation: ${error}`, error);
+    }
+  }
+
+  private getCurrentConfiguration(): BulkOperationConfig {
+    const strategySelect = this.getElementById('bulk-execution-strategy-select') as HTMLSelectElement;
+    const batchSizeInput = this.getElementById('bulk-batch-size') as HTMLInputElement;
+    const delayInput = this.getElementById('bulk-delay') as HTMLInputElement;
+    const maxRetriesInput = this.getElementById('bulk-max-retries') as HTMLInputElement;
+    const continueOnErrorCheckbox = this.getElementById('bulk-continue-on-error') as HTMLInputElement;
+    const detailedLoggingCheckbox = this.getElementById('bulk-detailed-logging') as HTMLInputElement;
+
+    return {
+      executionStrategy: (strategySelect?.value as any) || 'sequential',
+      batchSize: parseInt(batchSizeInput?.value || '5'),
+      delayBetweenOperations: parseInt(delayInput?.value || '1000'),
+      maxRetries: parseInt(maxRetriesInput?.value || '3'),
+      continueOnError: continueOnErrorCheckbox?.checked || true,
+      enableDetailedLogging: detailedLoggingCheckbox?.checked || false,
+      operationParams: {},
+      filterCriteria: {}
+    };
+  }
+
+  private updateConfiguration(): void {
+    const config = this.getCurrentConfiguration();
+    this.manager.updateConfiguration(config);
+  }
+
+  private updateExecutionStrategy(strategy: string): void {
+    const config = this.getCurrentConfiguration();
+    config.executionStrategy = strategy as any;
+    this.manager.updateConfiguration(config);
+  }
+
+  private async retryFailedTasks(): Promise<void> {
+    try {
+      await this.manager.retryFailedTasks();
+      this.updateState();
+    } catch (error) {
+      console.error('Failed to retry failed tasks:', error);
+      this.addError('system', `Failed to retry failed tasks: ${error}`, error);
+    }
+  }
+
+  private clearErrors(): void {
+    this.state.errors = [];
+    this.updateErrorDisplay();
+  }
+
+  private async previewOperation(): Promise<void> {
+    try {
+      const config = this.getCurrentConfiguration();
+      const preview = await this.manager.previewOperation(config);
+      
+      alert(`Operation Preview:\n\nAffected items: ${preview.itemCount}\nEstimated duration: ${preview.estimatedDuration}\nOperations: ${preview.operations.join(', ')}`);
+    } catch (error) {
+      console.error('Failed to preview operation:', error);
+      this.addError('system', `Failed to preview operation: ${error}`, error);
+    }
+  }
+
+  private async exportResults(): Promise<void> {
+    try {
+      const results = await this.manager.exportResults();
+      const blob = new Blob([JSON.stringify(results, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bulk-operation-results-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export results:', error);
+      this.addError('system', `Failed to export results: ${error}`, error);
+    }
+  }
+
+  private switchTab(tabName: string): void {
+    // Update tab appearance
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-content').forEach(content => {
+      content.classList.remove('active');
+    });
+
+    const activeTab = document.querySelector(`[data-tab="${tabName}"]`);
+    const activeContent = document.getElementById(`${tabName}-tab`);
+
+    activeTab?.classList.add('active');
+    activeContent?.classList.add('active');
+  }
+
+  private addError(taskId: string, message: string, details?: any): void {
+    this.state.errors.push({
+      taskId,
+      message,
+      timestamp: new Date(),
+      details
+    });
+
+    // Keep only last 50 errors
+    if (this.state.errors.length > 50) {
+      this.state.errors = this.state.errors.slice(-50);
+    }
+
+    this.updateErrorDisplay();
+  }
+
+  private getStatusIcon(status: string): string {
+    switch (status.toLowerCase()) {
+      case 'completed': return '✅';
+      case 'failed': return '❌';
+      case 'running': return '🔄';
+      case 'paused': return '⏸️';
+      case 'pending': return '⏳';
+      default: return '❓';
+    }
+  }
+
+  private getElementById(id: string): HTMLElement | null {
+    return document.getElementById(id);
+  }
+
+  private setElementText(id: string, text: string): void {
+    const element = this.getElementById(id);
+    if (element) {
+      element.textContent = text;
+    }
+  }
+
+  private getTextAreaValue(id: string): string {
+    const element = this.getElementById(id) as HTMLTextAreaElement;
+    return element?.value?.trim() || '';
+  }
+
+  public destroy(): void {
+    if (this.updateInterval) {
+      clearInterval(this.updateInterval);
+      this.updateInterval = null;
+    }
+  }
+}
