@@ -22,7 +22,7 @@
     "release:major": "pnpm run version:major && pnpm run distribute"
   },
   "dependencies": {
-    "openai": "^4.24.1"
+    "openai": "^4.104.0"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.3",
