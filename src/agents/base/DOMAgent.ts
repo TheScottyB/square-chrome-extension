@@ -239,6 +239,74 @@ export abstract class DOMAgent {
   }
 
   /**
+   * Enhanced error handling methods
+   */
+  protected async executeWithRetry<T>(
+    operation: () => Promise<T>,
+    maxAttempts = 3,
+    delay = 1000
+  ): Promise<T> {
+    let lastError: Error;
+    
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const result = await operation();
+        if (attempt > 1) {
+          console.log(`✅ Operation succeeded on attempt ${attempt}`);
+        }
+        return result;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        console.warn(`❌ Attempt ${attempt}/${maxAttempts} failed: ${lastError.message}`);
+        
+        if (attempt < maxAttempts) {
+          const backoffDelay = delay * Math.pow(2, attempt - 1);
+          console.log(`⏳ Waiting ${backoffDelay}ms before retry...`);
+          await this.sleep(backoffDelay);
+        }
+      }
+    }
+    
+    throw new Error(`Operation failed after ${maxAttempts} attempts: ${lastError!.message}`);
+  }
+
+  protected async safeElementOperation<T>(
+    selector: string,
+    operation: (element: HTMLElement) => Promise<T>,
+    fallback?: T
+  ): Promise<T> {
+    try {
+      const domElement = await this.findElement(selector, 5000);
+      
+      if (!domElement.exists || !domElement.element) {
+        if (fallback !== undefined) {
+          console.warn(`Element not found: ${selector}, using fallback`);
+          return fallback;
+        }
+        throw new Error(`Element not found: ${selector}`);
+      }
+      
+      return await operation(domElement.element);
+    } catch (error) {
+      if (fallback !== undefined) {
+        console.warn(`Operation failed on ${selector}, using fallback:`, error);
+        return fallback;
+      }
+      throw error;
+    }
+  }
+
+  protected async gracefulFind(selector: string, timeout = 5000): Promise<DOMElement | null> {
+    try {
+      const element = await this.findElement(selector, timeout);
+      return element.exists ? element : null;
+    } catch (error) {
+      console.warn(`Graceful find failed for ${selector}:`, error);
+      return null;
+    }
+  }
+
+  /**
    * Task execution with retry logic
    */
   async executeTask(task: AgentTask): Promise<AgentResult> {

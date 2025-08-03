@@ -50,61 +50,70 @@ export class SquareSEOAgent extends DOMAgent {
 
   private async fillSEOForm({ seoData }: { seoData: SEOData }): Promise<AgentResult> {
     try {
-      console.log('📝 Filling SEO form with:', seoData);
+      console.log('📝 Filling SEO form with enhanced error handling:', seoData);
 
-      // Square SEO form field selectors
+      // Square SEO form field selectors - updated for current DOM structure
       const selectors = {
-        title: 'input[name="name"], input[data-test-id="item-name-input"]',
-        description: 'textarea[name="description"], textarea[data-test-id="item-description-input"]',
-        tags: 'input[placeholder*="tag"], input[data-test-id="item-tags-input"]',
-        metaTitle: 'input[name="seo_title"], input[placeholder*="SEO title"]',
-        metaDescription: 'textarea[name="seo_description"], textarea[placeholder*="SEO description"]'
+        title: '[data-test-id="item-name-input"], [data-testid="item-name-input"], input[name="name"], input[placeholder*="item name" i]',
+        description: '[data-test-id="item-description-input"], [data-testid="item-description-input"], textarea[name="description"], textarea[placeholder*="description" i]',
+        tags: '[data-test-id="item-tags-input"], [data-testid="item-tags-input"], input[placeholder*="tag" i], .tag-input input',
+        metaTitle: '[data-test-id="seo-title-input"], [data-testid="seo-title-input"], input[name="seo_title"], input[placeholder*="seo title" i]',
+        metaDescription: '[data-test-id="seo-description-input"], [data-testid="seo-description-input"], textarea[name="seo_description"], textarea[placeholder*="seo description" i]'
       };
 
-      const results: string[] = [];
+      await this.executeWithRetry(async () => {
+        const results: string[] = [];
 
-      // Fill title
-      if (seoData.title) {
-        const filled = await this.typeInElement(selectors.title, seoData.title);
-        results.push(`Title: ${filled ? '✅' : '❌'}`);
-      }
+        // Fill title with enhanced error handling
+        if (seoData.title) {
+          const filled = await this.safeElementOperation(selectors.title, 
+            async (element) => this.typeInElement(selectors.title, seoData.title!), false);
+          results.push(`Title: ${filled ? '✅' : '❌'}`);
+        }
 
-      // Fill description
-      if (seoData.description) {
-        const filled = await this.typeInElement(selectors.description, seoData.description);
-        results.push(`Description: ${filled ? '✅' : '❌'}`);
-      }
+        // Fill description with enhanced error handling
+        if (seoData.description) {
+          const filled = await this.safeElementOperation(selectors.description, 
+            async (element) => this.typeInElement(selectors.description, seoData.description!), false);
+          results.push(`Description: ${filled ? '✅' : '❌'}`);
+        }
 
-      // Fill tags (Square uses a special tag input)
-      if (seoData.tags && seoData.tags.length > 0) {
-        const tagsFilled = await this.fillTags(seoData.tags);
-        results.push(`Tags: ${tagsFilled ? '✅' : '❌'}`);
-      }
+        // Fill tags with enhanced error handling
+        if (seoData.tags && seoData.tags.length > 0) {
+          const tagsFilled = await this.fillTags(seoData.tags);
+          results.push(`Tags: ${tagsFilled ? '✅' : '❌'}`);
+        }
 
-      // Fill meta title if available
-      if (seoData.metaTitle) {
-        const filled = await this.typeInElement(selectors.metaTitle, seoData.metaTitle);
-        results.push(`Meta Title: ${filled ? '✅' : '❌'}`);
-      }
+        // Fill meta title with enhanced error handling
+        if (seoData.metaTitle) {
+          const filled = await this.safeElementOperation(selectors.metaTitle, 
+            async (element) => this.typeInElement(selectors.metaTitle, seoData.metaTitle!), false);
+          results.push(`Meta Title: ${filled ? '✅' : '❌'}`);
+        }
 
-      // Fill meta description if available
-      if (seoData.metaDescription) {
-        const filled = await this.typeInElement(selectors.metaDescription, seoData.metaDescription);
-        results.push(`Meta Description: ${filled ? '✅' : '❌'}`);
-      }
+        // Fill meta description with enhanced error handling
+        if (seoData.metaDescription) {
+          const filled = await this.safeElementOperation(selectors.metaDescription, 
+            async (element) => this.typeInElement(selectors.metaDescription, seoData.metaDescription!), false);
+          results.push(`Meta Description: ${filled ? '✅' : '❌'}`);
+        }
 
-      const allSuccess = results.every(r => r.includes('✅'));
+        const allSuccess = results.every(r => r.includes('✅'));
+        if (!allSuccess) {
+          throw new Error(`Some fields failed to fill: ${results.join(', ')}`);
+        }
+      });
 
       return {
-        success: allSuccess,
-        message: `SEO form filled: ${results.join(', ')}`,
-        data: { results, seoData }
+        success: true,
+        message: 'SEO form filled successfully with enhanced error handling',
+        data: { seoData }
       };
 
     } catch (error) {
       return {
         success: false,
-        error: `Failed to fill SEO form: ${error instanceof Error ? error.message : String(error)}`
+        error: `Failed to fill SEO form after retries: ${error instanceof Error ? error.message : 'Unknown error'}`
       };
     }
   }
@@ -112,7 +121,7 @@ export class SquareSEOAgent extends DOMAgent {
   private async fillTags(tags: string[]): Promise<boolean> {
     try {
       // Square's tag input requires special handling
-      const tagInput = await this.findElement('input[placeholder*="tag"], input[data-test-id="item-tags-input"]');
+      const tagInput = await this.findElement('[data-test-id="item-tags-input"], [data-testid="item-tags-input"], input[placeholder*="tag" i], .tag-input input');
       
       if (!tagInput.exists || !tagInput.element) {
         console.warn('Tag input not found');

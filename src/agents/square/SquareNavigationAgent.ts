@@ -96,7 +96,7 @@ export class SquareNavigationAgent extends DOMAgent {
       // Navigate to the item
       const navResult = await this.navigateToUrl({
         url: itemUrl,
-        waitForSelector: waitForLoad ? '[data-test-id="item-detail-view"], .item-detail-container' : undefined
+        waitForSelector: waitForLoad ? '[data-test-id="item-details"], [data-testid="item-details"], .item-detail-container, .item-details-page' : undefined
       });
       
       if (!navResult.success) {
@@ -132,10 +132,13 @@ export class SquareNavigationAgent extends DOMAgent {
       
       // Find search input
       const searchSelectors = [
+        '[data-test-id="search-input"]',
+        '[data-testid="search-input"]',
         'input[placeholder*="Search"]',
         'input[type="search"]',
-        '[data-test-id="search-input"]',
-        '.search-input'
+        '[role="searchbox"]',
+        '.search-input',
+        'input[aria-label*="search" i]'
       ];
       
       let searchInput: any = null;
@@ -164,7 +167,7 @@ export class SquareNavigationAgent extends DOMAgent {
       
       // Click first result if requested
       if (clickFirstResult) {
-        const firstResult = await this.findElement('.catalog-item:first-child, [data-test-id="catalog-item"]:first-child', 3000);
+        const firstResult = await this.findElement('[data-test-id="catalog-item"]:first-child, [data-testid="catalog-item"]:first-child, .catalog-item:first-child, .item-card:first-child', 3000);
         
         if (firstResult.exists) {
           await this.clickElement(firstResult.selector);

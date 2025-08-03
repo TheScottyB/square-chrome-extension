@@ -4,6 +4,7 @@ import { DOMAgent } from './base/DOMAgent';
 import { SquareSEOAgent } from './square/SquareSEOAgent';
 import { SquareNavigationAgent } from './square/SquareNavigationAgent';
 import { AgentContext, AgentTask, AgentResult, PageContext } from './types';
+import { pageDetectionService } from '@/utils/pageDetectionService';
 
 /**
  * Central coordinator for managing multiple DOM agents
@@ -339,60 +340,44 @@ export class AgentCoordinator {
   }
 
   private startPageMonitoring(): void {
-    // Monitor for page navigation
-    let currentUrl = window.location.href;
+    console.log('🔍 Starting enhanced page monitoring...');
     
-    const urlObserver = new MutationObserver(() => {
-      if (window.location.href !== currentUrl) {
-        currentUrl = window.location.href;
-        this.handlePageChange();
-      }
+    // Use the advanced page detection service
+    pageDetectionService.onPageChange(async (context: PageContext) => {
+      console.log('📄 Page context changed via detection service:', context);
+      await this.handlePageContextChange(context);
     });
-
-    urlObserver.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
+    
+    pageDetectionService.startPageMonitoring();
   }
 
-  private async handlePageChange(): Promise<void> {
-    console.log('📄 Page change detected, updating context...');
-    
-    // Detect new page context
-    const newPageContext = await this.detectPageContext();
-    
-    // Reinitialize agents if needed
-    if (newPageContext.pageType !== this.context.page.pageType) {
-      await this.reinitializeAgents({ newPageContext });
-    } else {
-      // Just update context
-      this.context.page = newPageContext;
+  private async handlePageContextChange(newPageContext: PageContext): Promise<void> {
+    try {
+      console.log('📄 Handling page context change:', {
+        from: this.context.page.pageType,
+        to: newPageContext.pageType
+      });
+      
+      // Reinitialize agents if page type changed
+      if (newPageContext.pageType !== this.context.page.pageType) {
+        console.log('🔄 Page type changed, reinitializing agents...');
+        await this.reinitializeAgents({ newPageContext });
+      } else if (newPageContext.itemId !== this.context.page.itemId) {
+        // Update context if only item ID changed
+        console.log('🆔 Item ID changed, updating context...');
+        this.context.page = newPageContext;
+      } else {
+        // Just update context
+        this.context.page = newPageContext;
+      }
+    } catch (error) {
+      console.error('❌ Error handling page context change:', error);
     }
   }
 
   private async detectPageContext(): Promise<PageContext> {
-    const url = window.location.href;
-    const title = document.title;
-    const readyState = document.readyState;
-    
-    let pageType: PageContext['pageType'] = 'unknown';
-    let itemId: string | undefined;
-
-    if (url.includes('/items/library')) {
-      const itemMatch = url.match(/\/items\/library\/([A-Z0-9]+)/);
-      if (itemMatch) {
-        pageType = 'item-detail';
-        itemId = itemMatch[1];
-      } else {
-        pageType = 'items-library';
-      }
-    } else if (url.includes('/dashboard')) {
-      pageType = 'dashboard';
-    } else if (url.includes('spocket.co')) {
-      pageType = 'spocket';
-    }
-
-    return { url, pageType, itemId, title, readyState };
+    // Use the advanced page detection service
+    return await pageDetectionService.detectPageContext();
   }
 
   /**

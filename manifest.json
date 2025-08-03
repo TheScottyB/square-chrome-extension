@@ -26,7 +26,7 @@
   ],
   
   "background": {
-    "service_worker": "background.js",
+    "service_worker": "src/background.ts",
     "type": "module"
   },
   
@@ -36,7 +36,7 @@
         "https://app.squareup.com/*",
         "https://squareup.com/*"
       ],
-      "js": ["content.js"],
+      "js": ["src/content.ts"],
       "run_at": "document_idle"
     },
     {
@@ -44,7 +44,7 @@
         "https://app.spocket.co/*",
         "https://spocket.co/*"
       ],
-      "js": ["spocket-content.js"],
+      "js": ["src/spocket-content.ts"],
       "run_at": "document_idle"
     }
   ],
@@ -56,7 +56,7 @@
   
   "web_accessible_resources": [
     {
-      "resources": ["injected.js"],
+      "resources": ["src/injected.ts"],
       "matches": ["https://app.squareup.com/*"]
     }
   ]
