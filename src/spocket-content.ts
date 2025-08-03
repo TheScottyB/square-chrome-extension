@@ -12,10 +12,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   if (message.type === 'EXTRACT_PRODUCT_DATA') {
     spocketAgent.extractProductData()
-      .then((result) => {
+      .then((result: any) => {
         sendResponse({ success: true, data: result });
       })
-      .catch((error) => {
+      .catch((error: any) => {
         sendResponse({ success: false, error: error.message });
       });
     return true; // Keep the message channel open for async response
@@ -23,10 +23,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   if (message.type === 'DOWNLOAD_IMAGES') {
     spocketAgent.downloadProductImages(message.productData)
-      .then((result) => {
+      .then((result: any) => {
         sendResponse({ success: true, result });
       })
-      .catch((error) => {
+      .catch((error: any) => {
         sendResponse({ success: false, error: error.message });
       });
     return true; // Keep the message channel open for async response

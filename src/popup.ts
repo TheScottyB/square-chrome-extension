@@ -1,5 +1,5 @@
 // Popup script for Chrome extension UI
-import { chromeApiTools } from '@/utils/chromeApiTools';
+import { allChromeApiTools } from '@/utils/chromeApiTools';
 
 console.log('Popup script loaded');
 

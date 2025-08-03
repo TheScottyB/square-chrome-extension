@@ -1,7 +1,18 @@
-import { z } from 'zod';
-import { tool } from '@openai/agents';
+// Temporarily disabled due to Zod compatibility issues with @openai/agents
+// import { z } from 'zod';
+// import { tool } from '@openai/agents';
 import { DOMAgent } from '../base/DOMAgent';
-import { AgentContext, AgentTask, AgentResult, SEOData } from '../types';
+import { AgentContext, AgentTask, AgentResult } from '../types';
+
+// Temporary type definition for SEOData
+interface SEOData {
+  title?: string;
+  description?: string;
+  tags?: string[];
+  metaTitle?: string;
+  metaDescription?: string;
+  searchTerms?: string[];
+}
 
 /**
  * Specialized agent for Square Dashboard SEO operations
@@ -33,46 +44,8 @@ export class SquareSEOAgent extends DOMAgent {
   }
 
   protected buildTools() {
-    return [
-      tool({
-        name: 'fill_seo_form',
-        description: 'Fill Square SEO form fields with optimized content',
-        parameters: z.object({
-          seoData: z.object({
-            title: z.string().optional(),
-            description: z.string().optional(),
-            tags: z.array(z.string()).optional(),
-            metaTitle: z.string().optional(),
-            metaDescription: z.string().optional(),
-            searchTerms: z.array(z.string()).optional()
-          })
-        }),
-        execute: this.fillSEOForm.bind(this)
-      }),
-      tool({
-        name: 'generate_seo_content',
-        description: 'Generate optimized SEO content based on product information',
-        parameters: z.object({
-          productName: z.string(),
-          productDescription: z.string().optional(),
-          category: z.string().optional(),
-          keywords: z.array(z.string()).optional()
-        }),
-        execute: this.generateSEOContent.bind(this)
-      }),
-      tool({
-        name: 'validate_seo_fields',
-        description: 'Validate that all SEO fields meet requirements',
-        parameters: z.object({}),
-        execute: this.validateSEOFields.bind(this)
-      }),
-      tool({
-        name: 'save_seo_changes',
-        description: 'Save SEO changes and verify success',
-        parameters: z.object({}),
-        execute: this.saveSEOChanges.bind(this)
-      })
-    ];
+    // Temporarily disabled due to Zod compatibility issues
+    return [];
   }
 
   private async fillSEOForm({ seoData }: { seoData: SEOData }): Promise<AgentResult> {

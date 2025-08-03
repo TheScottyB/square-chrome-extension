@@ -156,3 +156,59 @@ export const spocketExtractionTools: AgentTool[] = [
     }
   }
 ];
+
+// SpocketAgent class for easier usage in content scripts
+export class SpocketAgent {
+  private tools: AgentTool[];
+
+  constructor() {
+    this.tools = spocketExtractionTools;
+  }
+
+  public async initialize(): Promise<void> {
+    console.log('🔧 SpocketAgent initialized');
+  }
+
+  public async extractProductData(): Promise<SpocketProduct> {
+    const tool = this.tools.find(t => t.name === 'extractProductData');
+    if (!tool) {
+      throw new Error('extractProductData tool not found');
+    }
+    return await tool.handler({}) as SpocketProduct;
+  }
+
+  public async downloadProductImages(productData: any): Promise<any> {
+    const tool = this.tools.find(t => t.name === 'downloadImages');
+    if (!tool) {
+      throw new Error('downloadImages tool not found');
+    }
+    
+    // Extract images from product data or use default
+    const images = productData?.images || [];
+    return await tool.handler({ images });
+  }
+
+  public async captureImages(): Promise<SpocketImage[]> {
+    const tool = this.tools.find(t => t.name === 'captureImages');
+    if (!tool) {
+      throw new Error('captureImages tool not found');
+    }
+    return await tool.handler({}) as SpocketImage[];
+  }
+
+  public async analyzeImage(imageUrl: string): Promise<any> {
+    const tool = this.tools.find(t => t.name === 'analyzeImage');
+    if (!tool) {
+      throw new Error('analyzeImage tool not found');
+    }
+    return await tool.handler({ imageUrl });
+  }
+
+  public async calculateProfitMargins(costPrice: string, sellPrice: string): Promise<any> {
+    const tool = this.tools.find(t => t.name === 'calculateProfitMargins');
+    if (!tool) {
+      throw new Error('calculateProfitMargins tool not found');
+    }
+    return await tool.handler({ costPrice, sellPrice });
+  }
+}

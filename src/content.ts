@@ -1,6 +1,6 @@
 // Content script for Square dashboard automation
 import { AgentManager } from '@/agents/AgentManager';
-import { chromeApiTools } from '@/utils/chromeApiTools';
+import { allChromeApiTools } from '@/utils/chromeApiTools';
 
 console.log('Square content script loaded');
 
@@ -13,10 +13,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   if (message.type === 'START_AUTOMATION') {
     agentManager.startAutomation(message.config)
-      .then((result) => {
+      .then((result: any) => {
         sendResponse({ success: true, result });
       })
-      .catch((error) => {
+      .catch((error: any) => {
         sendResponse({ success: false, error: error.message });
       });
     return true; // Keep the message channel open for async response

@@ -445,6 +445,62 @@ export class AgentManager implements AgentManagerInterface {
     });
   }
 
+  // Public method for content script initialization
+  public async initialize(): Promise<void> {
+    // The init() is already called in constructor, but this provides a public interface
+    console.log('🔧 AgentManager public initialization complete');
+  }
+
+  // Public method to start automation (simplified interface for content scripts)
+  public async startAutomation(config: any): Promise<any> {
+    try {
+      // Create or get an automation agent
+      let agentId = this.getAutomationAgentId();
+      
+      if (!agentId) {
+        // Create a new automation agent if none exists
+        agentId = await this.createAgent('square-automation', {
+          apiKey: config.apiKey || 'placeholder', // This should come from storage or config
+          model: 'gpt-4',
+          temperature: 0.7,
+          maxTokens: 1000
+        });
+      }
+      
+      // Start the agent with context
+      await this.startAgent(agentId, {
+        pageType: 'square-dashboard',
+        url: window.location?.href || 'unknown',
+        sessionId: this.generateId(),
+        timestamp: Date.now()
+      });
+      
+      return { success: true, agentId, message: 'Automation started' };
+    } catch (error) {
+      console.error('❌ Failed to start automation:', error);
+      throw error;
+    }
+  }
+
+  // Public method to stop automation
+  public async stopAutomation(): Promise<void> {
+    const agentId = this.getAutomationAgentId();
+    if (agentId) {
+      await this.stopAgent(agentId);
+      console.log('🛑 Automation stopped');
+    }
+  }
+
+  // Helper method to get the current automation agent ID
+  private getAutomationAgentId(): string | null {
+    for (const [id, agent] of this.agents) {
+      if (agent.type === 'square-automation') {
+        return id;
+      }
+    }
+    return null;
+  }
+
   // Public method to destroy agent manager
   public async destroy(): Promise<void> {
     // Stop all agents
