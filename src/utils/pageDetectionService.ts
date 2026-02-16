@@ -1,4 +1,5 @@
 import { PageContext } from '@/agents/types';
+import { squareEnvironment } from '@/config/squareEnvironment';
 
 /**
  * Advanced page detection service for Chrome extension
@@ -31,16 +32,18 @@ export class PageDetectionService {
     let itemId: string | undefined;
 
     // URL-based detection
-    const urlContext = this.analyzeUrl(url);
+    const urlContext = await this.analyzeUrl(url);
     
     // DOM-based detection for additional validation
     const domContext = await this.analyzeDOMContent();
+    
+    // Combine analysis results
+    itemId = urlContext.itemId || domContext.itemId;
     
     // Combine URL and DOM analysis
     pageType = (urlContext.pageType && urlContext.pageType !== 'unknown') 
       ? urlContext.pageType 
       : (domContext.pageType || 'unknown');
-    itemId = urlContext.itemId || domContext.itemId;
 
     const context: PageContext = {
       url,
@@ -58,16 +61,46 @@ export class PageDetectionService {
   }
 
   /**
-   * Analyze URL patterns to determine page type
+   * Analyze URL patterns to determine page type using environment configuration
    */
-  private analyzeUrl(url: string): Partial<PageContext> {
+  private async analyzeUrl(url: string): Promise<Partial<PageContext>> {
+    // Use environment manager to detect page type
+    const pageName = await squareEnvironment.detectCurrentPage(url);
+    
+    if (pageName) {
+      const pageConfig = squareEnvironment.getPageConfig(pageName);
+      if (pageConfig) {
+        // Map page config names to PageContext types
+        const pageTypeMapping: Record<string, PageContext['pageType']> = {
+          'dashboard': 'dashboard',
+          'catalog': 'items-library',
+          'item-edit': 'item-detail',
+          'seo': 'dashboard', // SEO is part of dashboard functionality
+          'login': 'unknown',
+          'spocket': 'spocket'
+        };
+        
+        const pageType = pageTypeMapping[pageName] || 'unknown';
+        
+        // Extract item ID if this is an item-related page
+        let itemId: string | undefined;
+        if (pageName === 'item-edit') {
+          const itemMatch = url.match(/\/items\/[^/]*\/([A-Z0-9_-]+)/i);
+          itemId = itemMatch ? itemMatch[1] : undefined;
+        }
+        
+        return { pageType, itemId };
+      }
+    }
+
+    // Fallback to legacy pattern matching
     const hostname = new URL(url).hostname;
     const pathname = new URL(url).pathname;
 
-    // Square Dashboard patterns
-    if (hostname.includes('squareup.com')) {
-      // Item detail page: /items/library/{ITEM_ID}
-      const itemMatch = pathname.match(/\/items\/library\/([A-Z0-9_-]+)/i);
+    // Square Dashboard patterns (legacy fallback)
+    if (hostname.includes('squareup.com') || hostname.includes('connect.squareupsandbox.com')) {
+      // Item detail/edit pages
+      const itemMatch = pathname.match(/\/items\/(?:library\/)?([A-Z0-9_-]+)(?:\/edit)?/i);
       if (itemMatch) {
         return {
           pageType: 'item-detail',
@@ -75,32 +108,34 @@ export class PageDetectionService {
         };
       }
 
-      // Items library: /items/library
-      if (pathname.includes('/items/library')) {
+      // Items library/catalog
+      if (pathname.includes('/items') || pathname.includes('/catalog')) {
         return { pageType: 'items-library' };
       }
 
-      // Dashboard home: /dashboard
+      // Inventory management
+      if (pathname.includes('/inventory')) {
+        return { pageType: 'inventory' };
+      }
+
+      // Dashboard home
       if (pathname.includes('/dashboard')) {
         return { pageType: 'dashboard' };
       }
 
-      // Default to unknown for other Square pages
-      return { pageType: 'unknown' };
+      // SEO/marketing pages
+      if (pathname.includes('/seo') || pathname.includes('/marketing') || pathname.includes('/online')) {
+        return { pageType: 'dashboard' };
+      }
     }
 
     // Spocket patterns
     if (hostname.includes('spocket.co')) {
-      // Product detail pages
-      if (pathname.includes('/product/') || pathname.includes('/products/')) {
-        const productMatch = pathname.match(/\/products?\/([^\/]+)/);
-        return {
-          pageType: 'spocket',
-          itemId: productMatch ? productMatch[1] : undefined
-        };
-      }
-
-      return { pageType: 'spocket' };
+      const productMatch = pathname.match(/\/products?\/([^\/]+)/);
+      return {
+        pageType: 'spocket',
+        itemId: productMatch ? productMatch[1] : undefined
+      };
     }
 
     return { pageType: 'unknown' };

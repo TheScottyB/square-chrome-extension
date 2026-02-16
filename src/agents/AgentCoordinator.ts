@@ -86,7 +86,7 @@ export class AgentCoordinator {
         });
       } catch (error) {
         // Ignore connection errors - background script may not be ready
-        console.log('Background script not available for notification:', error.message);
+        console.log('Background script not available for notification:', error instanceof Error ? error.message : String(error));
       }
 
     } catch (error) {

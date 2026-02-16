@@ -2,14 +2,12 @@ module.exports = {
   parser: '@typescript-eslint/parser',
   extends: [
     'eslint:recommended',
-    '@typescript-eslint/recommended',
-    'prettier'
+    'plugin:@typescript-eslint/recommended'
   ],
-  plugins: ['@typescript-eslint', 'prettier'],
+  plugins: ['@typescript-eslint'],
   parserOptions: {
     ecmaVersion: 2020,
-    sourceType: 'module',
-    project: './tsconfig.json'
+    sourceType: 'module'
   },
   env: {
     browser: true,
@@ -18,7 +16,6 @@ module.exports = {
     node: true
   },
   rules: {
-    'prettier/prettier': 'error',
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     '@typescript-eslint/explicit-function-return-type': 'off',
     '@typescript-eslint/explicit-module-boundary-types': 'off',

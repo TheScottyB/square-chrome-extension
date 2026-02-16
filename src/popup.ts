@@ -70,7 +70,7 @@ async function startAutomation() {
       }
     } catch (messageError) {
       // Handle messaging errors gracefully
-      if (messageError.message?.includes('Receiving end does not exist')) {
+      if ((messageError instanceof Error ? messageError.message : String(messageError))?.includes('Receiving end does not exist')) {
         updateStatus('Content script not ready. Try refreshing the page.', true);
         addLogEntry('Content script connection failed - refresh page and try again');
       } else {
@@ -109,7 +109,7 @@ async function stopAutomation() {
       }
     } catch (messageError) {
       // Handle messaging errors gracefully
-      if (messageError.message?.includes('Receiving end does not exist')) {
+      if ((messageError instanceof Error ? messageError.message : String(messageError))?.includes('Receiving end does not exist')) {
         updateStatus('Content script not ready. Try refreshing the page.', true);
         addLogEntry('Content script connection failed - refresh page and try again');
       } else {
