@@ -1,4 +1,95 @@
 import { AgentTool } from '@/types';
+import {
+  DEFAULT_RUNTIME_PROFILE,
+  ExtensionRuntimeCapabilities,
+  ExtensionRuntimeProfile,
+  RuntimeMode,
+  ScriptActionName,
+  ScriptActionPayload,
+  ScriptActionResult
+} from '@/types/scriptActions';
+
+const MODE_RANK: Record<RuntimeMode, number> = {
+  WEB_SAFE: 0,
+  LOCAL_STANDARD: 1,
+  LOCAL_PRIVILEGED: 2
+};
+
+const SCRIPT_OPERATION_POLICY: Record<
+  'executeScript' | 'insertCSS',
+  {
+    operation: string;
+    requiredMode: RuntimeMode;
+    requiredCapabilities: (keyof ExtensionRuntimeCapabilities)[];
+  }
+> = {
+  executeScript: {
+    operation: 'chrome_execute_script',
+    requiredMode: 'LOCAL_PRIVILEGED',
+    requiredCapabilities: ['chrome_control', 'js_injection']
+  },
+  insertCSS: {
+    operation: 'chrome_insert_css',
+    requiredMode: 'LOCAL_STANDARD',
+    requiredCapabilities: ['chrome_control']
+  }
+};
+
+const SCRIPT_ACTIONS: ScriptActionName[] = [
+  'getPageInfo',
+  'extractItemFields',
+  'setSeoFields',
+  'clickSelector',
+  'insertCssClass'
+];
+
+function isRuntimeMode(value: unknown): value is RuntimeMode {
+  return value === 'WEB_SAFE' || value === 'LOCAL_STANDARD' || value === 'LOCAL_PRIVILEGED';
+}
+
+function isRuntimeProfile(value: unknown): value is ExtensionRuntimeProfile {
+  if (!value || typeof value !== 'object') return false;
+  const maybe = value as Record<string, unknown>;
+  if (typeof maybe.runtimeId !== 'string') return false;
+  if (!isRuntimeMode(maybe.mode)) return false;
+  if (!maybe.capabilities || typeof maybe.capabilities !== 'object') return false;
+
+  const caps = maybe.capabilities as Record<string, unknown>;
+  const requiredKeys: (keyof ExtensionRuntimeCapabilities)[] = [
+    'filesystem_full_access',
+    'photos_full_access',
+    'chrome_control',
+    'js_injection',
+    'mcp_local_tools',
+    'network_access'
+  ];
+
+  return requiredKeys.every((key) => typeof caps[key] === 'boolean');
+}
+
+async function getRuntimeProfile(): Promise<ExtensionRuntimeProfile> {
+  const data = await chrome.storage.local.get(['runtimeProfile']);
+  const candidate = data.runtimeProfile;
+  return isRuntimeProfile(candidate) ? candidate : DEFAULT_RUNTIME_PROFILE;
+}
+
+async function enforceRuntimePolicy(tool: 'executeScript' | 'insertCSS'): Promise<void> {
+  const profile = await getRuntimeProfile();
+  const policy = SCRIPT_OPERATION_POLICY[tool];
+
+  if (MODE_RANK[profile.mode] < MODE_RANK[policy.requiredMode]) {
+    throw new Error(
+      `Runtime policy blocked ${policy.operation}: mode ${profile.mode} does not satisfy ${policy.requiredMode}`
+    );
+  }
+
+  const missing = policy.requiredCapabilities.filter((cap) => !profile.capabilities[cap]);
+  if (missing.length > 0) {
+    throw new Error(
+      `Runtime policy blocked ${policy.operation}: missing capabilities ${missing.join(', ')}`
+    );
+  }
+}
 
 // Chrome Downloads API Tools
 export const chromeDownloadsTools: AgentTool[] = [
@@ -197,23 +288,146 @@ export const chromeTabsTools: AgentTool[] = [
 export const chromeScriptingTools: AgentTool[] = [
   {
     name: 'executeScript',
-    description: 'Execute a script in a tab',
+    description: 'Execute an allowlisted script action in a tab',
     parameters: {
       type: 'object',
       properties: {
         tabId: { type: 'number', description: 'ID of the tab to execute script in' },
-        code: { type: 'string', description: 'JavaScript code to execute' },
+        action: {
+          type: 'string',
+          enum: SCRIPT_ACTIONS,
+          description: 'Allowlisted action to execute'
+        },
+        payload: {
+          type: 'object',
+          description: 'Optional action payload (shape depends on action)'
+        },
         allFrames: { type: 'boolean', description: 'Execute in all frames' }
       },
-      required: ['tabId', 'code']
+      required: ['tabId', 'action']
     },
-    handler: async (params: { tabId: number; code: string; allFrames?: boolean }) => {
+    handler: async (params: { tabId: number; action: ScriptActionName; payload?: ScriptActionPayload; allFrames?: boolean }) => {
       try {
+        await enforceRuntimePolicy('executeScript');
+
         const results = await chrome.scripting.executeScript({
           target: { tabId: params.tabId, allFrames: params.allFrames },
-          func: () => eval(params.code)
+          args: [params.action, params.payload || {}],
+          func: (action: ScriptActionName, payload: ScriptActionPayload): ScriptActionResult => {
+            const pickFirst = (selectors: string[]): HTMLElement | null => {
+              for (const selector of selectors) {
+                const el = document.querySelector(selector);
+                if (el) return el as HTMLElement;
+              }
+              return null;
+            };
+
+            const setInputValue = (element: HTMLInputElement | HTMLTextAreaElement, value: string): void => {
+              element.focus();
+              element.value = value;
+              element.dispatchEvent(new Event('input', { bubbles: true }));
+              element.dispatchEvent(new Event('change', { bubbles: true }));
+              element.blur();
+            };
+
+            switch (action) {
+              case 'getPageInfo': {
+                const itemMatch = window.location.href.match(/\/items\/library\/([A-Z0-9]+)/);
+                return {
+                  success: true,
+                  message: 'Page info extracted',
+                  data: {
+                    url: window.location.href,
+                    title: document.title,
+                    readyState: document.readyState,
+                    itemId: itemMatch ? itemMatch[1] : null
+                  }
+                };
+              }
+              case 'extractItemFields': {
+                const typed = payload as { nameSelector?: string; priceSelector?: string; descriptionSelector?: string };
+                const nameSelector = typed.nameSelector || '[data-testid=\"item-name\"]';
+                const priceSelector = typed.priceSelector || '[data-testid=\"item-price\"]';
+                const descriptionSelector = typed.descriptionSelector || '[data-testid=\"item-description\"]';
+
+                const name = document.querySelector(nameSelector)?.textContent?.trim() || '';
+                const price = document.querySelector(priceSelector)?.textContent?.trim() || '';
+                const description = document.querySelector(descriptionSelector)?.textContent?.trim() || '';
+
+                return {
+                  success: true,
+                  message: 'Item fields extracted',
+                  data: { name, price, description }
+                };
+              }
+              case 'setSeoFields': {
+                const typed = payload as {
+                  title?: string;
+                  description?: string;
+                  titleSelector?: string;
+                  descriptionSelector?: string;
+                };
+
+                const titleEl = pickFirst([
+                  typed.titleSelector || '',
+                  'input[name=\"seo_title\"]',
+                  'input[data-testid=\"seo-title\"]',
+                  'input[name=\"title\"]'
+                ].filter((s): s is string => Boolean(s))) as HTMLInputElement | null;
+
+                const descriptionEl = pickFirst([
+                  typed.descriptionSelector || '',
+                  'textarea[name=\"seo_description\"]',
+                  'textarea[data-testid=\"seo-description\"]',
+                  'textarea[name=\"description\"]'
+                ].filter((s): s is string => Boolean(s))) as HTMLTextAreaElement | null;
+
+                const updated: string[] = [];
+                if (typed.title && titleEl) {
+                  setInputValue(titleEl, typed.title);
+                  updated.push('title');
+                }
+                if (typed.description && descriptionEl) {
+                  setInputValue(descriptionEl, typed.description);
+                  updated.push('description');
+                }
+
+                return {
+                  success: true,
+                  message: `Updated SEO fields: ${updated.join(', ') || 'none'}`,
+                  data: { updated }
+                };
+              }
+              case 'clickSelector': {
+                const typed = payload as { selector?: string };
+                if (!typed.selector) {
+                  return { success: false, message: 'clickSelector requires payload.selector' };
+                }
+                const el = document.querySelector(typed.selector) as HTMLElement | null;
+                if (!el) {
+                  return { success: false, message: `Element not found: ${typed.selector}` };
+                }
+                el.click();
+                return { success: true, message: 'Element clicked' };
+              }
+              case 'insertCssClass': {
+                const typed = payload as { selector?: string; className?: string };
+                if (!typed.selector || !typed.className) {
+                  return { success: false, message: 'insertCssClass requires payload.selector and payload.className' };
+                }
+                const el = document.querySelector(typed.selector) as HTMLElement | null;
+                if (!el) {
+                  return { success: false, message: `Element not found: ${typed.selector}` };
+                }
+                el.classList.add(typed.className);
+                return { success: true, message: `Added class ${typed.className}` };
+              }
+              default:
+                return { success: false, message: `Unsupported script action: ${action}` };
+            }
+          }
         });
-        return { success: true, results, message: 'Script executed successfully' };
+        return { success: true, results, message: `Action executed successfully: ${params.action}` };
       } catch (error) {
         throw new Error(`Script execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
@@ -233,6 +447,8 @@ export const chromeScriptingTools: AgentTool[] = [
     },
     handler: async (params: { tabId: number; css: string; allFrames?: boolean }) => {
       try {
+        await enforceRuntimePolicy('insertCSS');
+
         await chrome.scripting.insertCSS({
           target: { tabId: params.tabId, allFrames: params.allFrames },
           css: params.css

@@ -17,6 +17,7 @@ export class AgentManager implements AgentManagerInterface {
   private openaiClients: Map<string, OpenAI> = new Map();
   private messageQueue: Map<string, AgentMessage[]> = new Map();
   private correlationMap: Map<string, (response: AgentResponse) => void> = new Map();
+  private agentMetrics: Map<string, { tasksCompleted: number; errors: number; lastActivity: number }> = new Map();
 
   constructor() {
     this.init();
@@ -52,6 +53,7 @@ export class AgentManager implements AgentManagerInterface {
     try {
       const agent = this.agents.get(agentId);
       if (!agent) return;
+      const metrics = this.getOrCreateMetrics(agentId);
 
       const data = await this.getStorageData();
       
@@ -63,7 +65,8 @@ export class AgentManager implements AgentManagerInterface {
         type: agent.type,
         name: agent.name,
         status: agent.status,
-        context: agent.context
+        context: agent.context,
+        metrics: { ...metrics }
       };
 
       await this.setStorageData(data);
@@ -86,6 +89,13 @@ export class AgentManager implements AgentManagerInterface {
 
       this.agents.set(agentId, agent);
       this.openaiClients.set(agentId, new OpenAI({ apiKey: config.apiKey }));
+
+      const restoredMetrics = state?.metrics || {};
+      this.agentMetrics.set(agentId, {
+        tasksCompleted: typeof restoredMetrics.tasksCompleted === 'number' ? restoredMetrics.tasksCompleted : 0,
+        errors: typeof restoredMetrics.errors === 'number' ? restoredMetrics.errors : 0,
+        lastActivity: typeof restoredMetrics.lastActivity === 'number' ? restoredMetrics.lastActivity : (state?.context?.timestamp || 0)
+      });
       
       console.log(`🔄 Restored agent: ${agent.name} (${agentId})`);
     } catch (error) {
@@ -103,7 +113,7 @@ export class AgentManager implements AgentManagerInterface {
     });
   }
 
-  private async handleExtensionMessage(message: any, sender: chrome.runtime.MessageSender): Promise<AgentResponse> {
+  private async handleExtensionMessage(message: any, _sender: chrome.runtime.MessageSender): Promise<AgentResponse> {
     try {
       const agentMessage: AgentMessage = {
         id: this.generateId(),
@@ -147,6 +157,11 @@ export class AgentManager implements AgentManagerInterface {
       this.agents.set(agentId, agent);
       this.openaiClients.set(agentId, client);
       this.messageQueue.set(agentId, []);
+      this.agentMetrics.set(agentId, {
+        tasksCompleted: 0,
+        errors: 0,
+        lastActivity: Date.now()
+      });
 
       await this.saveAgentToStorage(agentId);
 
@@ -168,6 +183,7 @@ export class AgentManager implements AgentManagerInterface {
     if (context) {
       agent.context = context;
     }
+    this.getOrCreateMetrics(agentId).lastActivity = Date.now();
 
     await this.saveAgentToStorage(agentId);
     console.log(`▶️ Started agent: ${agent.name} (${agentId})`);
@@ -180,6 +196,7 @@ export class AgentManager implements AgentManagerInterface {
     }
 
     agent.status = 'stopped';
+    this.getOrCreateMetrics(agentId).lastActivity = Date.now();
     await this.saveAgentToStorage(agentId);
     console.log(`⏹️ Stopped agent: ${agent.name} (${agentId})`);
   }
@@ -206,23 +223,31 @@ export class AgentManager implements AgentManagerInterface {
 
       // Process message with OpenAI
       const response = await this.processMessageWithOpenAI(agent, client, fullMessage);
+      const now = Date.now();
+      const metrics = this.getOrCreateMetrics(agentId);
+      metrics.tasksCompleted += 1;
+      metrics.lastActivity = now;
 
       return {
         success: true,
         data: response,
         agentId,
-        timestamp: Date.now(),
+        timestamp: now,
         correlationId: fullMessage.correlationId || fullMessage.id
       };
     } catch (error) {
       agent.status = 'error';
+      const now = Date.now();
+      const metrics = this.getOrCreateMetrics(agentId);
+      metrics.errors += 1;
+      metrics.lastActivity = now;
       await this.saveAgentToStorage(agentId);
 
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
         agentId,
-        timestamp: Date.now(),
+        timestamp: now,
         correlationId: fullMessage.correlationId || fullMessage.id
       };
     }
@@ -305,14 +330,15 @@ export class AgentManager implements AgentManagerInterface {
     if (!agent) {
       throw new Error(`Agent ${agentId} not found`);
     }
+    const metrics = this.getOrCreateMetrics(agentId);
 
     return {
       id: agent.id,
       name: agent.name,
       status: agent.status,
-      lastActivity: agent.context?.timestamp || 0,
-      tasksCompleted: 0, // TODO: Track this
-      errors: 0 // TODO: Track this
+      lastActivity: metrics.lastActivity || agent.context?.timestamp || 0,
+      tasksCompleted: metrics.tasksCompleted,
+      errors: metrics.errors
     };
   }
 
@@ -425,6 +451,17 @@ export class AgentManager implements AgentManagerInterface {
     }
   }
 
+  private getOrCreateMetrics(agentId: string): { tasksCompleted: number; errors: number; lastActivity: number } {
+    const existing = this.agentMetrics.get(agentId);
+    if (existing) {
+      return existing;
+    }
+
+    const initialized = { tasksCompleted: 0, errors: 0, lastActivity: 0 };
+    this.agentMetrics.set(agentId, initialized);
+    return initialized;
+  }
+
   private generateId(): string {
     return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
   }
@@ -513,6 +550,7 @@ export class AgentManager implements AgentManagerInterface {
     this.openaiClients.clear();
     this.messageQueue.clear();
     this.correlationMap.clear();
+    this.agentMetrics.clear();
 
     console.log('🗑️ AgentManager destroyed');
   }

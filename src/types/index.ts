@@ -1,4 +1,5 @@
 // Core types for OpenAI Agent SDK integration with Chrome Extension
+import type { ExtensionRuntimeProfile } from '@/types/scriptActions';
 
 export interface OpenAIAgentConfig {
   apiKey: string;
@@ -116,6 +117,7 @@ export interface ChromeStorageData {
   spocketProducts?: SpocketProduct[];
   settings?: ExtensionSettings;
   agentContext?: AgentContext;
+  runtimeProfile?: ExtensionRuntimeProfile;
   [key: string]: any;
 }
 

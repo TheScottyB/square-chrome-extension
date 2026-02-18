@@ -1,131 +1,72 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for agents working in this repository.
 
-## Development Environment
+## Project Type
 
-**Project Type**: Chrome Extension (Manifest V3)
-**No Build Process**: Extension runs directly from source files - no compilation required
-**Package Manager**: None required for extension files
+- Chrome extension (Manifest V3)
+- TypeScript source in `src/`
+- Built with Vite into `dist/`
 
-## Development Commands
+## Required Development Loop
 
-**Testing & Debugging:**
 ```bash
-# Load extension in Chrome
-# 1. Navigate to chrome://extensions/
-# 2. Enable Developer Mode
-# 3. Click "Load unpacked" and select chrome-extension directory
-
-# View background script logs
-# chrome://extensions/ → Square Automation → Inspect views: background page
-
-# View content script logs  
-# F12 Developer Tools on Square Dashboard pages
-
-# Inspect extension storage
-# Background page console: chrome.storage.local.get(console.log)
+pnpm install
+pnpm run type-check
+pnpm run test
+pnpm run build
 ```
 
-## Architecture Overview
+Load extension from `dist/` in `chrome://extensions/`.
 
-This is a **Chrome Extension for Square Dashboard automation** that integrates with the Square inventory management system via API. The extension provides browser-based automation capabilities for Square's web interface.
+## Runtime Safety Model
 
-### Core Architecture Pattern
+This extension enforces runtime/capability checks for scripting operations.
 
-**Extension Components**:
-- `background.js` - Service worker handling extension lifecycle, API calls, and cross-tab communication
-- `content.js` - Square Dashboard automation, DOM manipulation, and page-specific functionality  
-- `injected.js` - Advanced API interception injected into Square pages
-- `popup.js` - Extension popup UI and user interaction handling
-- `spocket-content.js` - Specialized content script for Spocket integration
-- `data-connector.js` - Integration with parent project's catalog data
+Modes:
 
-**Multi-Domain Support**:
-- **Square Dashboard** (`app.squareup.com/*`) - Primary automation target
-- **Spocket** (`app.spocket.co/*`) - Comprehensive product sourcing with rich data capture
-- **CDN Domains** - High-resolution image downloading from various sources
+- `WEB_SAFE`
+- `LOCAL_STANDARD`
+- `LOCAL_PRIVILEGED`
 
-### Key Integration Points  
+Scripting policy:
 
-**External API Integration**: Seamlessly integrates with the Square inventory management system by:
-- Fetching catalog data via HTTP API endpoints
-- Using consistent category and data structures
-- Complementing batch automation scripts with real-time browser actions
-- Maintaining local cache for offline functionality
+- `executeScript` requires `LOCAL_PRIVILEGED` and capabilities `chrome_control + js_injection`
+- `insertCSS` requires `LOCAL_STANDARD` and capability `chrome_control`
 
-**Chrome Extension APIs**:
-- `chrome.storage.local` - Persistent data storage for settings and catalog cache
-- `chrome.downloads` - Automated image downloading with progress tracking
-- `chrome.tabs` - Cross-tab communication and automation
-- `chrome.scripting` - Dynamic script injection for advanced features
+Runtime profile source:
 
-**Square Dashboard Automation**:
-- Page type detection (`items-library`, `item-detail`, `dashboard`)
-- SEO field automation and bulk updates
-- Image attachment and management
-- Real-time API call interception
+- `chrome.storage.local.runtimeProfile`
 
-**Spocket Product Intelligence**:
-- Comprehensive product data extraction (pricing, supplier, shipping, etc.)
-- Smart image detection using React Image Lightbox selectors
-- Automatic profit margin calculation and business intelligence
-- Product categorization and tagging system
-- Real-time capture controls with data preview modals
+If missing/invalid, runtime defaults to `WEB_SAFE` and privileged operations are blocked.
 
-### Development Patterns
+## Script Execution Contract
 
-**Message Passing Architecture**: All communication flows through the background script:
-```javascript
-// Content Script → Background → Action
-chrome.runtime.sendMessage({action: 'updateSEO', data: seoData});
+Do not add arbitrary code execution paths.
 
-// Background → Content Script → DOM manipulation  
-chrome.tabs.sendMessage(tabId, {action: 'executeTask', task: task});
-```
+`executeScript` must use allowlisted actions from:
 
-**Storage Management**: Extension uses Chrome's local storage with structured data:
-- `catalogData` - Synced from Square inventory management API
-- `spocketProducts` - Captured product data from Spocket
-- `settings` - User preferences and automation toggles
+- `src/types/scriptActions.ts`
 
-**Error Handling**: Comprehensive async/await patterns with try-catch blocks and user feedback through console logging and popup notifications.
+Current allowlist:
 
-### File Structure & Responsibilities
+- `getPageInfo`
+- `extractItemFields`
+- `setSeoFields`
+- `clickSelector`
+- `insertCssClass`
 
-**Core Files**:
-- `manifest.json` - Extension configuration, permissions, and content script registration
-- `background.js` - Central message hub, API operations, and automation orchestration
-- `content.js` - Square page DOM manipulation and automation execution
-- `popup.html/js` - User interface and manual operation triggers
+## Key Files
 
-**Integration Files**:
-- `data-connector.js` - Bridge to Square inventory management API
-- `spocket-content.js` - Specialized product sourcing automation
-- `injected.js` - Advanced browser API interception
+- `manifest.json` - extension permissions and host scope
+- `src/background.ts` - background service worker
+- `src/content.ts` - content script entrypoint
+- `src/injected.ts` - page-context bridge
+- `src/utils/chromeApiTools.ts` - tool handlers + runtime checks
+- `src/types/scriptActions.ts` - action and runtime type contracts
 
-### Environment Configuration
+## Security Constraints
 
-**Required Permissions** (defined in manifest.json):
-- `activeTab` - Access to current Square tab only
-- `storage` - Local extension data persistence  
-- `downloads` - Automated image downloading
-- `scripting` - Dynamic script injection capabilities
-
-**Host Permissions**: Restricted to Square domains, Spocket, and CDN domains for security
-
-### Development Workflow
-
-**Local Testing**:
-1. Load extension via chrome://extensions/ (no build step required)
-2. Navigate to Square Dashboard to activate content scripts
-3. Use popup interface to test automation features
-4. Monitor console logs in both background and content script contexts
-
-**Debugging Strategy**:
-- Background script errors: Extension inspection page
-- Content script errors: Browser DevTools on Square pages  
-- Message passing: Log all chrome.runtime messages
-- Storage inspection: Query chrome.storage.local in background console
-
-**Integration Testing**: Test with Square inventory management server running to ensure API compatibility and workflow integration.
+- Keep host permissions least-privilege.
+- No `eval` for user-provided or model-provided script strings.
+- Do not log API keys or tokens.

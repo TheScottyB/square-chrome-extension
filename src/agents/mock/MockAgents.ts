@@ -1,6 +1,10 @@
 import { DOMAgent } from '../base/DOMAgent';
 import { AgentTask, AgentResult, AgentContext } from '../types';
 
+function isTestEnvironment(): boolean {
+  return typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
+}
+
 /**
  * Mock validation agent for testing bulk operations
  */
@@ -22,10 +26,10 @@ export class MockValidationAgent extends DOMAgent {
     
     try {
       // Mock validation processing
-      await this.delay(Math.random() * 1000 + 500); // 0.5-1.5 seconds
+      await this.delay(isTestEnvironment() ? 1 : (Math.random() * 1000 + 500)); // 0.5-1.5 seconds
       
       // Simulate occasional validation failures
-      if (Math.random() < 0.2) {
+      if (!isTestEnvironment() && Math.random() < 0.2) {
         throw new Error('Validation failed: Data does not meet business rules');
       }
       
@@ -72,10 +76,10 @@ export class MockImageSearchAgent extends DOMAgent {
     
     try {
       // Mock image search processing
-      await this.delay(Math.random() * 2000 + 1000); // 1-3 seconds
+      await this.delay(isTestEnvironment() ? 1 : (Math.random() * 2000 + 1000)); // 1-3 seconds
       
       // Simulate occasional search failures
-      if (Math.random() < 0.15) {
+      if (!isTestEnvironment() && Math.random() < 0.15) {
         throw new Error('Image search failed: No suitable images found');
       }
       

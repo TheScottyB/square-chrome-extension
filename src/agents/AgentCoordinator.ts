@@ -1,4 +1,4 @@
-import { Agent, run } from '@openai/agents';
+import { Agent } from '@openai/agents';
 import { z } from 'zod';
 import { DOMAgent } from './base/DOMAgent';
 import { SquareSEOAgent } from './square/SquareSEOAgent';
@@ -336,35 +336,44 @@ export class AgentCoordinator {
     });
   }
 
-  private async handleExternalMessage(message: any, sender: any, sendResponse: Function): Promise<void> {
+  private async handleExternalMessage(
+    message: any,
+    sender: any,
+    sendResponse: (response: unknown) => void
+  ): Promise<void> {
     try {
       console.log('📨 Coordinator received message:', message);
 
       switch (message.action) {
-        case 'executeTask':
+        case 'executeTask': {
           const result = await this.executeTask(message.task);
           sendResponse(result);
           break;
+        }
 
-        case 'executeWorkflow':
+        case 'executeWorkflow': {
           const workflowResult = await this.executeWorkflow({ workflow: message.workflow });
           sendResponse(workflowResult);
           break;
+        }
 
-        case 'getStatus':
+        case 'getStatus': {
           const status = await this.getAgentStatus();
           sendResponse(status);
           break;
+        }
 
-        case 'updateSEO':
+        case 'updateSEO': {
           const seoResult = await this.handleSEOUpdate(message.data);
           sendResponse(seoResult);
           break;
+        }
 
-        case 'navigateToItem':
+        case 'navigateToItem': {
           const navResult = await this.handleNavigation(message.itemId);
           sendResponse(navResult);
           break;
+        }
 
         default:
           sendResponse({ success: false, error: 'Unknown action' });
@@ -428,6 +437,34 @@ export class AgentCoordinator {
     return await pageDetectionService.detectPageContext();
   }
 
+  private resolveAgentTypeForTask(task: AgentTask): string {
+    const explicitAgentType =
+      task.data &&
+      typeof task.data === 'object' &&
+      typeof task.data.agentType === 'string'
+        ? task.data.agentType
+        : undefined;
+
+    if (explicitAgentType) {
+      return explicitAgentType;
+    }
+
+    const routingByTaskType: Partial<Record<AgentTask['type'], string>> = {
+      'seo-update': 'seo',
+      'fill-form': 'seo',
+      navigate: 'navigation',
+      search: 'navigation',
+      'catalog-sync': 'catalog',
+      'inventory-update': 'catalog',
+      'extract-data': 'catalog',
+      validation: 'validation',
+      'image-search': 'image-search',
+      'manage-images': 'image-search'
+    };
+
+    return routingByTaskType[task.type] || 'default';
+  }
+
   /**
    * Public API methods
    */
@@ -441,24 +478,17 @@ export class AgentCoordinator {
       return this.simulateTaskExecution(task);
     }
 
-    const prompt = `Execute the following task using the most appropriate agent:
-    
-Task Type: ${task.type}
-Priority: ${task.priority}
-Data: ${JSON.stringify(task.data)}
-
-Analyze the task and route it to the correct specialized agent.`;
+    const resolvedAgentType = this.resolveAgentTypeForTask(task);
 
     try {
-      const result = await run(this.coordinatorAgent, prompt, {
-        context: this.context
+      return await this.routeTaskToAgent({
+        agentType: resolvedAgentType,
+        task: {
+          type: task.type,
+          data: task.data,
+          priority: task.priority
+        }
       });
-
-      return {
-        success: true,
-        message: typeof result === 'string' ? result : 'Task completed',
-        data: task.data
-      };
 
     } catch (error) {
       return {

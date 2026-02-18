@@ -8,6 +8,10 @@ import { squareEnvironment } from '@/config/squareEnvironment';
 import { SquareDOMUtils } from '@/square/domUtils';
 import { SquareAuthUtils } from '@/square/authUtils';
 
+const testGlobal = globalThis as typeof globalThis & {
+  getComputedStyle: typeof getComputedStyle;
+};
+
 describe('Square Utilities Validation', () => {
   describe('SquareSelectors', () => {
     it('should get primary selector from config', () => {
@@ -95,7 +99,7 @@ describe('Square Utilities Validation', () => {
       } as unknown as HTMLElement;
       
       // Mock getComputedStyle
-      global.getComputedStyle = jest.fn().mockReturnValue({
+      testGlobal.getComputedStyle = jest.fn().mockReturnValue({
         visibility: 'visible',
         display: 'block'
       });
@@ -139,87 +143,3 @@ describe('Square Utilities Validation', () => {
     });
   });
 });
-
-// Helper function to expect values
-function expect(actual: any) {
-  return {
-    toBe: (expected: any) => {
-      if (actual !== expected) {
-        throw new Error(`Expected ${actual} to be ${expected}`);
-      }
-    },
-    toBeDefined: () => {
-      if (actual === undefined) {
-        throw new Error(`Expected ${actual} to be defined`);
-      }
-    },
-    toHaveLength: (length: number) => {
-      if (!actual || actual.length !== length) {
-        throw new Error(`Expected ${actual} to have length ${length}`);
-      }
-    },
-    toBeGreaterThan: (value: number) => {
-      if (typeof actual !== 'number' || actual <= value) {
-        throw new Error(`Expected ${actual} to be greater than ${value}`);
-      }
-    },
-    toBeGreaterThanOrEqual: (value: number) => {
-      if (typeof actual !== 'number' || actual < value) {
-        throw new Error(`Expected ${actual} to be greater than or equal to ${value}`);
-      }
-    },
-    toContain: (substring: string) => {
-      if (typeof actual !== 'string' || !actual.includes(substring)) {
-        throw new Error(`Expected ${actual} to contain ${substring}`);
-      }
-    },
-    toBeInstanceOf: (constructor: any) => {
-      if (!(actual instanceof constructor)) {
-        throw new Error(`Expected ${actual} to be instance of ${constructor.name}`);
-      }
-    }
-  };
-}
-
-// Mock jest and global objects for testing
-const jest = {
-  fn: () => ({
-    mockReturnValue: (value: any) => value
-  })
-};
-
-const global = globalThis as any;
-
-// Mock describe function
-function describe(name: string, fn: () => void) {
-  console.log(`\n📋 Test Suite: ${name}`);
-  try {
-    fn();
-    console.log(`✅ All tests in "${name}" passed`);
-  } catch (error) {
-    console.error(`❌ Tests in "${name}" failed:`, error);
-  }
-}
-
-// Mock it function
-function it(name: string, fn: () => void | Promise<void>) {
-  console.log(`  🧪 Test: ${name}`);
-  try {
-    const result = fn();
-    if (result instanceof Promise) {
-      return result.then(
-        () => console.log(`    ✅ PASS: ${name}`),
-        (error) => {
-          console.error(`    ❌ FAIL: ${name}`, error);
-          throw error;
-        }
-      );
-    } else {
-      console.log(`    ✅ PASS: ${name}`);
-    }
-  } catch (error) {
-    console.error(`    ❌ FAIL: ${name}`, error);
-    throw error;
-  }
-}
-

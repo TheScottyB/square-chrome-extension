@@ -21,8 +21,7 @@
     "https://*.cloudfront.net/*",
     "https://app.spocket.co/*",
     "https://spocket.co/*",
-    "https://*.spocket.co/*",
-    "*://*/*"
+    "https://*.spocket.co/*"
   ],
   
   "background": {
